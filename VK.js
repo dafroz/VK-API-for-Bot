@@ -17,9 +17,11 @@ class VK {
 		self.longPollParams = false;
 		self.messageCallBack = Function();
 		self.lastServers = {};
+        self.commands = [];
 		setInterval(function() {
             self.execute(false);
         }, Math.ceil(1000 / (self.accessTokens.length * 3)) + 50);
+        self.longPoll();
 	}
 
 	longPoll() {
@@ -58,7 +60,7 @@ class VK {
                             	messages_ids.push(update[1]);
                             	continue;
                             }
-                            let messageObject = {
+                            self.pushNewMessage({
                                 user_id: update[3],
                                 body: update[6].replace(/<br>/g, ' '),
                                 id: update[1],
@@ -66,14 +68,7 @@ class VK {
                                 out: 0,
                                 read_state: 0,
                                 date: update[4]
-                            };
-                            messageObject.reply = (message, callback) => {
-                                callback = callback || Function();
-                                let params = message instanceof Object ? message : {message: message};
-                                params.peer_id = messageObject.user_id;
-                                self.sendMessage(params, callback);
-                            };
-                            self.messageCallBack(messageObject);
+                            });
         				}
         				if (messages_ids.length == 0) {
         					return;
@@ -81,14 +76,7 @@ class VK {
         				self.api('messages.getById', {message_ids: messages_ids.join(',')}, function(data) {
         					if (data && data.items) {
         						for (var i = data.items.length - 1; i >= 0; i--) {
-                                    let messageObject = data.items[i];
-                                    messageObject.reply = (message, callback) => {
-                                        callback = callback || Function();
-                                        let params = message instanceof Object ? message : {message: message};
-                                        params.peer_id = messageObject.user_id;
-                                        self.sendMessage(params, callback);
-                                    };
-        							self.messageCallBack(messageObject);
+                                    self.pushNewMessage(data.items[i]);
         						}
         					}
         				});
@@ -104,9 +92,45 @@ class VK {
         });
 	}
 
+    pushNewMessage(messageObject) {
+        var self = this;
+        messageObject.sendMessage = (message, callback) => {
+            callback = callback || Function();
+            let params = message instanceof Object ? message : {message: message};
+            params.peer_id = messageObject.user_id;
+            self.sendMessage(params, callback);
+        };
+        messageObject.sendFile = (params, callback) => {
+            callback = callback || Function();
+            params = params instanceof Object ? params : {file: params};
+            self.uploadFile(messageObject.user_id, params.file, (params.type || false), (doc) => {
+                if (!doc) {
+                    callback(false);
+                    return;
+                }
+                self.sendMessage({message: (params.message || false), peer_id: messageObject.user_id, attachment: 'doc' + doc.owner_id + '_' + doc.id, forward_messages: (params.forward_messages || false)}, (message_id) => {
+                    callback(message_id, doc);
+                });
+            });
+        };
+        messageObject.sendPhoto = (params, callback) => {
+            callback = callback || Function();
+            params = params instanceof Object ? params : {file: params};
+            self.uploadPhoto(messageObject.user_id, params.file, (photo) => {
+                if (!photo) {
+                    callback(false);
+                    return;
+                }
+                self.sendMessage({message: (params.message || false), peer_id: messageObject.user_id, attachment: 'photo' + photo.owner_id + '_' + photo.id, forward_messages: (params.forward_messages || false)}, (message_id) => {
+                    callback(message_id, photo);
+                });
+            });
+        }
+        self.messageCallBack(messageObject);
+    }
+
 	sendMessage(params, callback) {
         var self = this;
-        
         callback = callback || Function();
         var to_id = params.peer_id || params.user_id || params.chat_id;
         if (!params.random_id) {
@@ -124,12 +148,11 @@ class VK {
 	onNewMessage(callback) {
 		var self = this;
 		self.messageCallBack = callback;
-		self.longPoll();
 	}
 
-	docsMessagesUploadServer(peer_id, file, type, callback) {
+	uploadFile(peer_id, file, type, callback) {
         var self = this;
-        let key = 'docsGetMessagesUploadServer' + peer_id + '_' + type;
+        let key = 'docsUploadServer' + peer_id + '_' + type;
         self.docsGetMessagesUploadServer(peer_id, type, function(upload_url) {
             if (!upload_url) {
                 callback(false);
@@ -184,8 +207,8 @@ class VK {
 
 	docsGetMessagesUploadServer(peer_id, type, callback) {
         var self = this;
-        let key = 'docsGetMessagesUploadServer' + peer_id + '_' + type;
-        if (Object.keys(self.lastServers).length >= 5000) {
+        let key = 'docsUploadServer' + peer_id + '_' + type;
+        if (Object.keys(self.lastServers).length >= 500) {
             self.lastServers = {};
         }
         if (self.lastServers[key]) {
@@ -199,6 +222,80 @@ class VK {
             options.type = type;
         }
         self.api('docs.getMessagesUploadServer', options, function(data) {
+            if (data && data.upload_url) {
+                self.lastServers[key] = data.upload_url;
+                callback(data.upload_url);
+            } else {
+                callback(false);
+            }
+        });
+    }
+
+    uploadPhoto(peer_id, file, callback) {
+        var self = this;
+        let key = 'photosUploadServer' + peer_id;
+        self.photosGetMessagesUploadServer(peer_id, function(upload_url) {
+            if (!upload_url) {
+                callback(false);
+                return;
+            }
+            let data = {
+                photo: {
+                    value: fs.createReadStream(file),
+                    options: {
+                        filename: path.basename(file),
+                        contentType: mime.lookup(file)
+                    }
+                }
+            };
+            request.post({url: upload_url, formData: data}, function(err, response, body) {
+                if (err) {
+                    callback(false);
+                    return;
+                }
+                try {
+                    body = JSON.parse(body);
+                } catch(e) {
+                    if (self.lastServers[key]) {
+                        delete self.lastServers[key];
+                    }
+                    callback(false);
+                    return;
+                }
+                if (!err && response.statusCode == 200 && body.photo) {
+                    self.api('photos.saveMessagesPhoto', body, function(upload_result) {
+                        if (upload_result && upload_result.length >= 1) {
+                            callback(upload_result[0]);
+                            return;
+                        } else {
+                            if (self.lastServers[key]) {
+                                delete self.lastServers[key];
+                            }
+                            callback(false);
+                            return;
+                        }
+                    });
+                } else {
+                    if (self.lastServers[key]) {
+                        delete self.lastServers[key];
+                    }
+                    callback(false);
+                }
+            });
+        });
+    }
+
+    photosGetMessagesUploadServer(peer_id, callback) {
+        var self = this;
+        let key = 'photosUploadServer' + peer_id;
+        if (Object.keys(self.lastServers).length >= 500) {
+            self.lastServers = {};
+        }
+        if (self.lastServers[key]) {
+            callback(self.lastServers[key]);
+            return;
+        }
+        self.api('photos.getMessagesUploadServer', {peer_id: peer_id}, function(data) {
             if (data && data.upload_url) {
                 self.lastServers[key] = data.upload_url;
                 callback(data.upload_url);
