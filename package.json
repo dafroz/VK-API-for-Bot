@@ -1,0 +1,27 @@
+{
+  "name": "vk-api-for-bot",
+  "version": "0.0.1",
+  "description": "",
+  "main": "VK.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AntDev95/VK-API-for-Bot.git"
+  },
+  "keywords": [
+    "vk",
+    "vk-api",
+    "bots"
+  ],
+  "author": "Anton Anton <anton.polstianka@yandex.ru> (https://vk.com/bot_maxim)",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AntDev95/VK-API-for-Bot/issues"
+  },
+  "homepage": "https://github.com/AntDev95/VK-API-for-Bot#readme",
+  "dependencies": {
+    "request": "^2.81.0"
+  }
+}
