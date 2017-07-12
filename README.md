@@ -1,8 +1,6 @@
 # VK-API-for-Bot
 Библиотека для работы с VK API для ботов.
 
-Все запросы к API собираются в один и выполняются каждые несколько миллисекунд через https://vk.com/dev/execute
-
 # Установка
 ```
 git clone https://github.com/AntDev95/VK-API-for-Bot.git
@@ -32,10 +30,44 @@ VK.onNewMessage((message) => {
 Callback API работает только через защищенное https соеденение.
 Для того чтобы ваш сайт работал через https, нужно получить сертификат. Его можно купить, но можно получить бесплатно на 4 месяца и обновлять его каждые 4 месяца.
 
+**Вместо bot-maxim.com указывате домен вашего сайта!**
 ```
 git clone https://github.com/letsencrypt/letsencrypt
 cd /root/letsencrypt
 ./letsencrypt-auto certonly -a standalone -d bot-maxim.com
+```
+
+После этого будет создано два файла в директории /etc/letsencrypt/live/bot-maxim.com/
+
+Пример конфига для Nginx 
+```
+server {
+    listen 443 http2 ssl;
+    server_name bot-maxim.com;
+    ssl_certificate /etc/letsencrypt/live/bot-maxim.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/bot-maxim.com/privkey.pem;
+    ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers "EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH";
+    ssl_ecdh_curve secp384r1;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    charset utf-8;
+    
+    location /callback_api {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3000s;
+    }
+}
+```
+Перезапустить Nginx:
+```
+service nginx restart
 ```
 
 # Функции
@@ -70,7 +102,7 @@ VK.onNewMessage((message) => {
 - sendPhoto
 - sendFile
 
-### .sendMessage(msg, callback) 
+### Message.sendMessage(msg, callback) 
 *Отвечает на полученное сообщение*
 
 | Параметр  | Тип | Обязательный | Описание |
@@ -96,7 +128,7 @@ message.sendMessage({message: 'Привет', attachment: 'photo-135209264_45633
 *Все параметры Вы можете узнать в документации VK API вот тут: https://vk.com/dev/messages.send*
 
 
-### .sendPhoto(params, callback)
+### Message.sendPhoto(params, callback)
 *Загружает и отправляет фото в текущий диалог*
 
 | Параметр  | Тип | Обязательный | Описание |
@@ -112,7 +144,7 @@ message.sendPhoto('photo.jpg');
 message.sendPhoto({message: 'Вот фото', file: 'animation.gif'});
 ```
 
-### .sendFile(params, callback)
+### Message.sendFile(params, callback)
 *Загружает и отправляет документ в текущий диалог*
 
 | Параметр  | Тип | Обязательный | Описание |
