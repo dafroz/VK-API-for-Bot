@@ -26,6 +26,10 @@ VK.onNewMessage((message) => {
 });
 ```
 
+Результат:
+
+![alt text](https://raw.githubusercontent.com/AntDev95/VK-API-for-Bot/master/example_screen.png)
+
 # Получение бесплатного SSL сертификата
 Callback API работает только через защищенное https соеденение.
 Для того чтобы ваш сайт работал через https, нужно получить сертификат. Его можно купить, но можно получить бесплатно на 4 месяца и обновлять его каждые 4 месяца.
